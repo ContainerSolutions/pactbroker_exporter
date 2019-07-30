@@ -23,7 +23,7 @@ The default way to build is:
 
 ```bash
 go get github.com/pperzyna/pactbroker_exporter
-cd ${GOPATH-$HOME/go}/src/github.com/pperzyna/pactbroker_exporter/src/
+cd ${GOPATH-$HOME/go}/src/github.com/pperzyna/pactbroker_exporter/
 go build -o pactbroker_exporter
 export DATA_SOURCE_NAME="http://localhost:9292"
 ./pactbroker_exporter <flags>
@@ -39,6 +39,13 @@ export DATA_SOURCE_NAME="http://localhost:9292"
 
 * `data-source-name`
   Address of Pact Broker. Default is `http://localhost:9292`.
+
+* `log.level`
+  Set logging level: one of `debug`, `info`, `warn`, `error`, `fatal`
+
+* `log.format`
+  Set the log output target and format. e.g. `logger:syslog?appname=bob&local=7` or `logger:stdout?json=true`
+  Defaults to `logger:stderr`.
 
 ### Environment Variables
 
