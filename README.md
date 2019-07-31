@@ -14,7 +14,7 @@ This package is available for Docker:
 2. Run Pact Broker Exporter
 
 ```bash
-docker run --net=host -e DATA_SOURCE_NAME="http://localhost:9292" pperzyna/pactbroker_exporter
+docker run --net=host -e PB_EXPORTER_PACTBROKER_URI="http://localhost:9292" pperzyna/pactbroker_exporter
 ```
 
 ## Building and running
@@ -25,7 +25,7 @@ The default way to build is:
 go get github.com/pperzyna/pactbroker_exporter
 cd ${GOPATH-$HOME/go}/src/github.com/pperzyna/pactbroker_exporter/
 go build -o pactbroker_exporter
-export DATA_SOURCE_NAME="http://localhost:9292"
+export PB_EXPORTER_PACTBROKER_URI="http://localhost:9292"
 ./pactbroker_exporter <flags>
 ```
 
