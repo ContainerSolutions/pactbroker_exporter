@@ -31,14 +31,17 @@ export DATA_SOURCE_NAME="http://localhost:9292"
 
 ### Flags
 
+* `pactbroker.uri`
+  Address of Pact Broker. Default is `http://localhost:9292`.
+
+* `pactbroker.timeout`
+  Timeout request to Pact Broker. Default is `5s`.
+
 * `web.listen-address`
-  Address to listen on for web interface and telemetry. Default is `:9623`.
+  Address to listen on for web interface and telemetry. Default is `:9624`.
 
 * `web.telemetry-path`
   Path under which to expose metrics. Default is `/metrics`.
-
-* `data-source-name`
-  Address of Pact Broker. Default is `http://localhost:9292`.
 
 * `log.level`
   Set logging level: one of `debug`, `info`, `warn`, `error`, `fatal`
@@ -51,11 +54,14 @@ export DATA_SOURCE_NAME="http://localhost:9292"
 
 The following environment variables configure the exporter:
 
-* `DATA_SOURCE_NAME`
-  Address of Pact Broker
+* `PB_EXPORTER_PACTBROKER_URI`
+  Address of Pact Broker. Default is `http://localhost:9292`.
+
+* `PB_EXPORTER_PACTBROKER_TIMEOUT`
+  Timeout reqeust to Pact Broker. Default is `5s`.
 
 * `PB_EXPORTER_WEB_LISTEN_ADDRESS`
-  Address to listen on for web interface and telemetry. Default is `:9187`.
+  Address to listen on for web interface and telemetry. Default is `:9624`.
 
 * `PB_EXPORTER_WEB_TELEMETRY_PATH`
   Path under which to expose metrics. Default is `/metrics`.

@@ -1,77 +1,26 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net"
-	"net/http"
 	"os"
-	"runtime"
-	"time"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/log"
 	"github.com/prometheus/common/version"
 	"gopkg.in/alecthomas/kingpin.v2"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"net/url"
+	"sync"
+	"time"
 )
 
 const (
 	namespace = "pactbroker"
-)
-
-var (
-	// Version is set during build to the git describe version
-	Version = "0.0.1"
-
-	listenAddress = kingpin.Flag(
-		"web.listen-address",
-		"Address to listen on for web interface and telemetry.",
-	).Default(getEnv("PB_EXPORTER_WEB_LISTEN_ADDRESS", ":9623")).String()
-	metricPath = kingpin.Flag(
-		"web.telemetry-path",
-		"Path under which to expose metrics.",
-	).Default(getEnv("PB_EXPORTER_WEB_TELEMETRY_PATH", "/metrics")).String()
-	dataSourceName = kingpin.Flag(
-		"data-source-name",
-		"Address of Pact Broker",
-	).Default(getEnv("DATA_SOURCE_NAME", "http://localhost:9292")).String()
-
-	netTransport = &http.Transport{
-		Dial: (&net.Dialer{
-			Timeout: 5 * time.Second,
-		}).Dial,
-		TLSHandshakeTimeout: 5 * time.Second,
-	}
-	netClient = &http.Client{
-		Timeout:   time.Second * 10,
-		Transport: netTransport,
-	}
-
-	pactBrokerUp = promauto.NewGauge(
-		prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "up",
-			Help:      "Whether the last scrape of metrics from Pact Broker was able to connect to the server (1 for yes, 0 for no).",
-		},
-	)
-	pactBrokerPacticipants = promauto.NewGauge(
-		prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "pacticipant_total",
-			Help:      "The total number of pacticipants",
-		},
-	)
-	pactBrokerPacts = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "pacticipant",
-			Help:      "Current number of pacts",
-		},
-		[]string{"name"},
-	)
 )
 
 func getEnv(key, defaultValue string) string {
@@ -82,20 +31,80 @@ func getEnv(key, defaultValue string) string {
 	return value
 }
 
-// Check connection to Pact Broker
-func checkConnection() (float64, error) {
-	r, e := netClient.Get(*dataSourceName)
-	if e != nil {
-		return 0, e
-	}
-	if r.StatusCode >= 200 && r.StatusCode <= 299 {
-		return 1, nil
-	} else {
-		return 0, nil
-	}
+// Exporter structure
+type Exporter struct {
+	uri   string
+	mutex sync.RWMutex
+	fetch func(endpoint string) (io.ReadCloser, error)
+
+	pactBrokerUp, pactBrokerPacticipants		prometheus.Gauge
+	pactBrokerPacts                         *prometheus.GaugeVec
+	totalScrapes                            prometheus.Counter
 }
 
-// Part of structure pacticipants response
+// NewExporter function
+func NewExporter(uri string, timeout time.Duration) (*Exporter, error) {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return nil, err
+	}
+
+	var fetch func(endpoint string) (io.ReadCloser, error)
+	switch u.Scheme {
+	case "http", "https", "file":
+		fetch = fetchHTTP(uri, timeout)
+	default:
+		return nil, fmt.Errorf("unsupported scheme: %q", u.Scheme)
+	}
+
+	return &Exporter{
+		uri:   uri,
+		fetch: fetch,
+		pactBrokerUp: prometheus.NewGauge(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Name:      "up",
+				Help:      "Was the last scrape successful.",
+			},
+		),
+		pactBrokerPacts: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Name:      "pacticipants",
+				Help:      "Current number of pacts per pacticipant.",
+		 	},
+		 	[]string{"name"},
+		),
+		pactBrokerPacticipants: promauto.NewGauge(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Name:      "pacticipants_total",
+				Help:      "The total number of pacticipants.",
+			},
+		),		
+		totalScrapes: promauto.NewCounter(
+			prometheus.CounterOpts{
+				Namespace: namespace,
+				Name:      "scrapes_total",
+				Help:      "Current total scrapes.",
+			},
+		),
+	}, nil
+}
+
+// Describe function of Exporter
+func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {}
+
+// Collect function of Exporter
+func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
+	e.mutex.Lock() 
+	defer e.mutex.Unlock()
+
+	up := e.scrape(ch)
+
+	ch <- prometheus.MustNewConstMetric(e.pactBrokerUp.Desc(), prometheus.GaugeValue, up)
+}
+
 type pacticipants struct {
 	Embedded struct {
 		Pacticipants []struct {
@@ -104,25 +113,6 @@ type pacticipants struct {
 	} `json:"_embedded"`
 }
 
-func getPacticipants() (pacticipants, error) {
-	var p pacticipants
-
-	r, e := netClient.Get(*dataSourceName + "/pacticipants")
-	if e != nil {
-		return p, e
-	}
-	defer r.Body.Close()
-
-	body, e := ioutil.ReadAll(r.Body)
-	if e != nil {
-		return p, e
-	}
-	json.Unmarshal([]byte(body), &p)
-
-	return p, nil
-}
-
-// Part of structure pacts response
 type pacts struct {
 	Links struct {
 		Pbpacts []struct {
@@ -131,66 +121,97 @@ type pacts struct {
 	} `json:"_links"`
 }
 
-func getPacts(pacticipant string) (pacts, error) {
-	var p pacts
+func (e *Exporter) scrape(ch chan<- prometheus.Metric) (up float64) {
+	e.totalScrapes.Inc()
 
-	r, e := netClient.Get(*dataSourceName + "/pacts/provider/" + pacticipant)
-	if e != nil {
-		return p, e
+	var p pacticipants
+
+	body, err := e.fetch("/pacticipants")
+	if err != nil {
+		log.Errorf("Can't scrape Pack: %v", err)
+		return 0
 	}
-	defer r.Body.Close()
+	defer body.Close()
 
-	body, e := ioutil.ReadAll(r.Body)
-	if e != nil {
-		return p, e
+	bodyAll, err := ioutil.ReadAll(body)
+	if err != nil {
+		return 0
 	}
-	json.Unmarshal([]byte(body), &p)
 
-	return p, nil
+	_ = json.Unmarshal([]byte(bodyAll), &p)
+
+	e.pactBrokerPacticipants.Set(float64(len(p.Embedded.Pacticipants)))
+
+	for _, pacticipant := range p.Embedded.Pacticipants {
+		var bodyPact io.ReadCloser
+		var pacts pacts
+
+		bodyPact, err = e.fetch("/pacts/provider/" + pacticipant.Name)
+		if err != nil {
+			log.Errorf("Can't scrape Pack: %v", err)
+			return 0
+		}
+		defer bodyPact.Close()
+
+		pactsAll, err := ioutil.ReadAll(bodyPact)
+		if err != nil {
+			return 0
+		}
+		_ = json.Unmarshal([]byte(pactsAll), &pacts)
+
+		e.pactBrokerPacts.WithLabelValues(pacticipant.Name).Set(float64(len(pacts.Links.Pbpacts)))
+	}
+
+	return 1
+}
+
+func fetchHTTP(uri string, timeout time.Duration) func(endpoint string) (io.ReadCloser, error) {
+	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	client := http.Client{
+		Timeout:   timeout,
+		Transport: tr,
+	}
+
+	return func(endpoint string) (io.ReadCloser, error) {
+		resp, err := client.Get(uri + endpoint)
+		if err != nil {
+			return nil, err
+		}
+		if !(resp.StatusCode >= 200 && resp.StatusCode < 300) {
+			resp.Body.Close()
+			return nil, fmt.Errorf("HTTP status %d", resp.StatusCode)
+		}
+		return resp.Body, nil
+	}
 }
 
 func main() {
+
+	var (
+		listenAddress   = kingpin.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(getEnv("PB_EXPORTER_WEB_LISTEN_ADDRESS", ":9624")).String()
+		metricsPath     = kingpin.Flag("web.telemetry-path", "Path under which to expose metrics.").Default(getEnv("PB_EXPORTER_WEB_TELEMETRY_PATH", "/metrics")).String()
+		uri 						= kingpin.Flag("pactbroker.uri", "URI of Pact Broker.").Default(getEnv("PB_EXPORTER_PACTBROKER_URI", "http://localhost:9292")).String()
+		timeout   			= kingpin.Flag("pactbroker.timeout", "Scrape timeout").Default(getEnv("PB_EXPORTER_PACTBROKER_TIMEOUT", "5s")).Duration()
+	)
+
 	log.AddFlags(kingpin.CommandLine)
-	kingpin.Version(fmt.Sprintf("pactbroker_exporter %s (built with %s)", Version, runtime.Version()))
+	kingpin.Version(version.Print("pactbroker_exporter"))
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
-
-	go func() {
-		for {
-			time.Sleep(2 * time.Second)
-
-			c, e := checkConnection()
-			pactBrokerUp.Set(c)
-			if e != nil {
-				log.Error(e)
-				continue
-			}
-
-			p, e := getPacticipants()
-			if e != nil {
-				log.Error(e)
-			}
-			pactBrokerPacticipants.Set(float64(len(p.Embedded.Pacticipants)))
-
-			for _, pacticipant := range p.Embedded.Pacticipants {
-				pacts, e := getPacts(pacticipant.Name)
-				if e != nil {
-					log.Error(e)
-				}
-				pactBrokerPacts.WithLabelValues(pacticipant.Name).Set(float64(len(pacts.Links.Pbpacts)))
-			}
-		}
-	}()
-
-	// landingPage contains the HTML served at '/'.
-	var landingPage = []byte(`<html><head><title>Pact Broker Exporter</title></head><body><h1>Pact Broker Exporter</h1><p><a href='` + *metricPath + `'>Metrics</a></p></body></html>`)
 
 	log.Infoln("Starting pactbroker_exporter", version.Info())
 	log.Infoln("Build context", version.BuildContext())
 
-	http.Handle(*metricPath, promhttp.Handler())
+	exporter, err := NewExporter(*uri, *timeout)
+	if err != nil {
+		log.Fatal(err)
+	}
+	prometheus.MustRegister(exporter)
+	prometheus.MustRegister(version.NewCollector("pactexporter"))
+
+	http.Handle(*metricsPath, promhttp.Handler())
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write(landingPage)
+		w.Write([]byte(`<html><head><title>Pact Broker Exporter</title></head><body><h1>Pact Broker Exporter</h1><p><a href='` + *metricsPath + `'>Metrics</a></p></body></html>`))
 	})
 
 	log.Infoln("Listening on", *listenAddress)
