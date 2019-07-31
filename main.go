@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"os"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -23,23 +22,15 @@ const (
 	namespace = "pactbroker"
 )
 
-func getEnv(key, defaultValue string) string {
-	value := os.Getenv(key)
-	if len(value) == 0 {
-		return defaultValue
-	}
-	return value
-}
-
 // Exporter structure
 type Exporter struct {
 	uri   string
 	mutex sync.RWMutex
 	fetch func(endpoint string) (io.ReadCloser, error)
 
-	pactBrokerUp, pactBrokerPacticipants		prometheus.Gauge
-	pactBrokerPacts                         *prometheus.GaugeVec
-	totalScrapes                            prometheus.Counter
+	pactBrokerUp, pactBrokerPacticipants prometheus.Gauge
+	pactBrokerPacts                      *prometheus.GaugeVec
+	totalScrapes                         prometheus.Counter
 }
 
 // NewExporter function
@@ -72,8 +63,8 @@ func NewExporter(uri string, timeout time.Duration) (*Exporter, error) {
 				Namespace: namespace,
 				Name:      "pacticipants",
 				Help:      "Current number of pacts per pacticipant.",
-		 	},
-		 	[]string{"name"},
+			},
+			[]string{"name"},
 		),
 		pactBrokerPacticipants: promauto.NewGauge(
 			prometheus.GaugeOpts{
@@ -81,7 +72,7 @@ func NewExporter(uri string, timeout time.Duration) (*Exporter, error) {
 				Name:      "pacticipants_total",
 				Help:      "The total number of pacticipants.",
 			},
-		),		
+		),
 		totalScrapes: promauto.NewCounter(
 			prometheus.CounterOpts{
 				Namespace: namespace,
@@ -97,7 +88,7 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {}
 
 // Collect function of Exporter
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
-	e.mutex.Lock() 
+	e.mutex.Lock()
 	defer e.mutex.Unlock()
 
 	up := e.scrape(ch)
@@ -188,10 +179,10 @@ func fetchHTTP(uri string, timeout time.Duration) func(endpoint string) (io.Read
 func main() {
 
 	var (
-		listenAddress   = kingpin.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(getEnv("PB_EXPORTER_WEB_LISTEN_ADDRESS", ":9624")).String()
-		metricsPath     = kingpin.Flag("web.telemetry-path", "Path under which to expose metrics.").Default(getEnv("PB_EXPORTER_WEB_TELEMETRY_PATH", "/metrics")).String()
-		uri 						= kingpin.Flag("pactbroker.uri", "URI of Pact Broker.").Default(getEnv("PB_EXPORTER_PACTBROKER_URI", "http://localhost:9292")).String()
-		timeout   			= kingpin.Flag("pactbroker.timeout", "Scrape timeout").Default(getEnv("PB_EXPORTER_PACTBROKER_TIMEOUT", "5s")).Duration()
+		listenAddress = kingpin.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(":9624").Envar("PB_EXPORTER_WEB_LISTEN_ADDRESS").String()
+		metricsPath   = kingpin.Flag("web.telemetry-path", "Path under which to expose metrics.").Default("/metrics").Envar("PB_EXPORTER_WEB_TELEMETRY_PATH").String()
+		uri           = kingpin.Flag("pactbroker.uri", "URI of Pact Broker.").Default("http://localhost:9292").Envar("PB_EXPORTER_PACTBROKER_URI").String()
+		timeout       = kingpin.Flag("pactbroker.timeout", "Scrape timeout").Default("5s").Envar("PB_EXPORTER_PACTBROKER_TIMEOUT").Duration()
 	)
 
 	log.AddFlags(kingpin.CommandLine)
@@ -211,7 +202,7 @@ func main() {
 
 	http.Handle(*metricsPath, promhttp.Handler())
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`<html><head><title>Pact Broker Exporter</title></head><body><h1>Pact Broker Exporter</h1><p><a href='` + *metricsPath + `'>Metrics</a></p></body></html>`))
+		_, _ = w.Write([]byte(`<html><head><title>Pact Broker Exporter</title></head><body><h1>Pact Broker Exporter</h1><p><a href='` + *metricsPath + `'>Metrics</a></p></body></html>`))
 	})
 
 	log.Infoln("Listening on", *listenAddress)
