@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"runtime"
@@ -17,10 +18,14 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
-// Version is set during build to the git describe version
-var Version = "0.0.1"
+const (
+	namespace = "pactbroker"
+)
 
 var (
+	// Version is set during build to the git describe version
+	Version = "0.0.1"
+
 	listenAddress = kingpin.Flag(
 		"web.listen-address",
 		"Address to listen on for web interface and telemetry.",
@@ -33,16 +38,18 @@ var (
 		"data-source-name",
 		"Address of Pact Broker",
 	).Default(getEnv("DATA_SOURCE_NAME", "http://localhost:9292")).String()
-)
 
-// Metric name parts.
-const (
-	// Namespace for all metrics.
-	namespace = "pactbroker"
-)
+	netTransport = &http.Transport{
+		Dial: (&net.Dialer{
+			Timeout: 5 * time.Second,
+		}).Dial,
+		TLSHandshakeTimeout: 5 * time.Second,
+	}
+	netClient = &http.Client{
+		Timeout:   time.Second * 10,
+		Transport: netTransport,
+	}
 
-// Metrics variables
-var (
 	pactBrokerUp = promauto.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: namespace,
@@ -77,7 +84,7 @@ func getEnv(key, defaultValue string) string {
 
 // Check connection to Pact Broker
 func checkConnection() (float64, error) {
-	r, e := http.Get(*dataSourceName)
+	r, e := netClient.Get(*dataSourceName)
 	if e != nil {
 		return 0, e
 	}
@@ -100,7 +107,7 @@ type pacticipants struct {
 func getPacticipants() (pacticipants, error) {
 	var p pacticipants
 
-	r, e := http.Get(*dataSourceName + "/pacticipants")
+	r, e := netClient.Get(*dataSourceName + "/pacticipants")
 	if e != nil {
 		return p, e
 	}
@@ -119,9 +126,7 @@ func getPacticipants() (pacticipants, error) {
 type pacts struct {
 	Links struct {
 		Pbpacts []struct {
-			Href  string `json:"href"`
-			Name  string `json:"name"`
-			Title string `json:"title"`
+			Name string `json:"name"`
 		} `json:"pb:pacts"`
 	} `json:"_links"`
 }
@@ -129,7 +134,7 @@ type pacts struct {
 func getPacts(pacticipant string) (pacts, error) {
 	var p pacts
 
-	r, e := http.Get(*dataSourceName + "/pacts/provider/" + pacticipant)
+	r, e := netClient.Get(*dataSourceName + "/pacts/provider/" + pacticipant)
 	if e != nil {
 		return p, e
 	}
@@ -153,13 +158,13 @@ func main() {
 	go func() {
 		for {
 			time.Sleep(2 * time.Second)
-			
+
 			c, e := checkConnection()
+			pactBrokerUp.Set(c)
 			if e != nil {
 				log.Error(e)
 				continue
 			}
-			pactBrokerUp.Set(c)
 
 			p, e := getPacticipants()
 			if e != nil {
@@ -173,7 +178,7 @@ func main() {
 					log.Error(e)
 				}
 				pactBrokerPacts.WithLabelValues(pacticipant.Name).Set(float64(len(pacts.Links.Pbpacts)))
-			}			
+			}
 		}
 	}()
 
