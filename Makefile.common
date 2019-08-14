@@ -113,7 +113,7 @@ common-docker:
 
 .PHONY: common-docker-publish
 common-docker-publish:
-	docker push "$(DOCKER_REPO)/$(DOCKER_IMAGE_NAME)"
+	docker push "$(DOCKER_REPO)/$(DOCKER_IMAGE_NAME):latest"
 
 .PHONY: common-docker-publish-tag
 common-docker-publish-tag:

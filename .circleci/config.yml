@@ -56,6 +56,7 @@ jobs:
             make docker-publish-tag DOCKER_IMAGE_TAG=$CIRCLE_TAG
           else
             make docker
+            make docker-tag-latest
             make docker-publish
           fi
 
