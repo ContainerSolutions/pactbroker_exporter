@@ -4,18 +4,19 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/prometheus/common/log"
-	"github.com/prometheus/common/version"
-	"gopkg.in/alecthomas/kingpin.v2"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/log"
+	"github.com/prometheus/common/version"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 const (
@@ -55,29 +56,29 @@ func NewExporter(uri string, timeout time.Duration) (*Exporter, error) {
 			prometheus.GaugeOpts{
 				Namespace: namespace,
 				Name:      "up",
-				Help:      "Was the last scrape successful.",
+				Help:      "The current health status of the server (1 = UP, 0 = DOWN).",
 			},
 		),
 		pactBrokerPacts: promauto.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: namespace,
-				Name:      "pacticipants",
-				Help:      "Current number of pacts per pacticipant.",
+				Name:      "pacts",
+				Help:      "The current number of pacts per pacticipant.",
 			},
 			[]string{"name"},
 		),
 		pactBrokerPacticipants: promauto.NewGauge(
 			prometheus.GaugeOpts{
 				Namespace: namespace,
-				Name:      "pacticipants_total",
-				Help:      "The total number of pacticipants.",
+				Name:      "pacticipants",
+				Help:      "The current number of pacticipants.",
 			},
 		),
 		totalScrapes: promauto.NewCounter(
 			prometheus.CounterOpts{
 				Namespace: namespace,
-				Name:      "scrapes_total",
-				Help:      "Current total scrapes.",
+				Name:      "total_scrapes",
+				Help:      "The total number of scrapes.",
 			},
 		),
 	}, nil

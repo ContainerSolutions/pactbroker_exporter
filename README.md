@@ -2,7 +2,7 @@
 
 Prometheus exporter for [Pact Broker](https://github.com/pact-foundation/pact_broker).
 
-[![Build Status](https://travis-ci.org/pperzyna/pactbroker_exporter.svg?branch=master)](https://travis-ci.org/pperzyna/pactbroker_exporter)
+[![CircleCI](https://circleci.com/gh/pperzyna/pactbroker_exporter.svg?style=svg)](https://circleci.com/gh/pperzyna/pactbroker_exporter)
 [![Docker Pulls](https://img.shields.io/docker/pulls/pperzyna/pactbroker_exporter.svg)](https://hub.docker.com/r/pperzyna/pactbroker_exporter/tags)
 
 ## Quick Start
