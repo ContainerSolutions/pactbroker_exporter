@@ -4,83 +4,81 @@ version: 2
 jobs:
   test:
     docker:
-    - image: circleci/golang:1.12
+      - image: circleci/golang:1.12
 
     steps:
-    - checkout
-    - run: make promu
-    - run: make style build
-    - run: rm -fv pact_exporter
+      - checkout
+      - run: make promu
+      - run: make style build
+      - run: rm -fv pact_exporter
 
   build:
-    machine:
-      image: ubuntu-1604:201903-01
+    docker:
+      - image: circleci/golang:1.12
 
     steps:
-    - checkout
-    - run: make promu
-    - run: promu crossbuild -v
-    - persist_to_workspace:
-        root: .
-        paths:
-        - .build
+      - checkout
+      - run: make promu
+      - setup_remote_docker
+      - run: promu crossbuild -v
+      - persist_to_workspace:
+          root: .
+          paths:
+            - .build
 
   public_release:
     docker:
-    - image: circleci/golang:1.12
+      - image: circleci/golang:1.12
 
     steps:
-    - checkout
-    - run: mkdir -v -p ${HOME}/bin
-    - run: curl -L 'https://github.com/aktau/github-release/releases/download/v0.7.2/linux-amd64-github-release.tar.bz2' | tar xvjf - --strip-components 3 -C ${HOME}/bin
-    - run: echo 'export PATH=${HOME}/bin:${PATH}' >> ${BASH_ENV}
-    - attach_workspace:
-        at: .
-    - run: make promu
-    - run: promu crossbuild tarballs
-    - run: promu checksum .tarballs
-    - run: promu release .tarballs
-    - persist_to_workspace:
-        root: .
-        paths:
-        - .build
-    - store_artifacts:
-        path: .tarballs
-        destination: releases
-    - setup_remote_docker
-    - run:
-        command: |
-          echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-          if [ -n "$CIRCLE_TAG" ]; then
-            make docker DOCKER_IMAGE_TAG=$CIRCLE_TAG
-            make docker-publish-tag DOCKER_IMAGE_TAG=$CIRCLE_TAG
-          else
-            make docker
-            make docker-tag-latest
-            make docker-publish
-          fi
+      - checkout
+      - run: mkdir -v -p ${HOME}/bin
+      - run: curl -L 'https://github.com/aktau/github-release/releases/download/v0.7.2/linux-amd64-github-release.tar.bz2' | tar xvjf - --strip-components 3 -C ${HOME}/bin
+      - run: echo 'export PATH=${HOME}/bin:${PATH}' >> ${BASH_ENV}
+      - attach_workspace:
+          at: .
+      - run: make promu
+      - run: promu crossbuild tarballs
+      - run: promu checksum .tarballs
+      - run: promu release .tarballs
+      - persist_to_workspace:
+          root: .
+          paths:
+            - .build
+      - store_artifacts:
+          path: .tarballs
+          destination: releases
+      - setup_remote_docker
+      - run:
+          command: |
+            echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+            if [ -n "$CIRCLE_TAG" ]; then
+              make docker DOCKER_IMAGE_TAG=$CIRCLE_TAG
+              make docker-publish-tag DOCKER_IMAGE_TAG=$CIRCLE_TAG
+            else
+              make docker
+              make docker-tag-latest
+              make docker-publish
+            fi
 
 workflows:
   version: 2
   pactbroker_exporter:
     jobs:
-    - test:
-        filters:
-          tags:
-            only: /.*/
-    - build:
-        filters:
-          tags:
-            only: /.*/
-    - public_release:
-        requires:
-        - test
-        - build
-        filters:
-          tags:
-            only: /^v.*/
-          branches:
-            only: master
-
-
-
+      - test:
+          filters:
+            tags:
+              only: /.*/
+      - build:
+          filters:
+            tags:
+              only: /.*/
+      - public_release:
+          requires:
+            - test
+            - build
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              only: master
