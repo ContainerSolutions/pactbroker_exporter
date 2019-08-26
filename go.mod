@@ -1,4 +1,4 @@
-module github.com/pperzyna/pactbroker_exporter
+module github.com/ContainerSolutions/pactbroker_exporter
 
 go 1.12
 

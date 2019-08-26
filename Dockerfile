@@ -1,6 +1,6 @@
 FROM golang:alpine AS builder
 RUN apk update && apk add --no-cache git
-WORKDIR $GOPATH/src/pperzyna/pactbroker_exporter/
+WORKDIR $GOPATH/src/ContainerSolutions/pactbroker_exporter/
 COPY . .
 RUN GO111MODULE=on go mod download
 
