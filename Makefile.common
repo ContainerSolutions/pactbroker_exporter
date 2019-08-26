@@ -36,7 +36,7 @@ pkgs          = ./...
 PREFIX                  ?= $(shell pwd)
 BIN_DIR                 ?= $(shell pwd)
 DOCKER_IMAGE_TAG        ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))
-DOCKER_REPO             ?= pperzyna
+DOCKER_REPO             ?= containersol
 
 .PHONY: all
 all: style staticcheck unused build test
