@@ -85,7 +85,14 @@ func NewExporter(uri string, timeout time.Duration) (*Exporter, error) {
 }
 
 // Describe function of Exporter
-func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {}
+func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
+
+	ch <- e.totalScrapes.Desc()
+	ch <- e.pactBrokerPacticipants.Desc()
+	ch <- e.pactBrokerUp.Desc()
+	e.pactBrokerPacts.Describe(ch)
+
+}
 
 // Collect function of Exporter
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
@@ -95,6 +102,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	up := e.scrape(ch)
 
 	ch <- prometheus.MustNewConstMetric(e.pactBrokerUp.Desc(), prometheus.GaugeValue, up)
+
 }
 
 type pacticipants struct {
@@ -132,7 +140,7 @@ func (e *Exporter) scrape(ch chan<- prometheus.Metric) (up float64) {
 
 	_ = json.Unmarshal([]byte(bodyAll), &p)
 
-	e.pactBrokerPacticipants.Set(float64(len(p.Embedded.Pacticipants)))
+	ch <- prometheus.MustNewConstMetric(e.pactBrokerPacticipants.Desc(), prometheus.GaugeValue, float64(len(p.Embedded.Pacticipants)))
 
 	for _, pacticipant := range p.Embedded.Pacticipants {
 		var bodyPact io.ReadCloser
