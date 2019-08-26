@@ -140,7 +140,6 @@ func (e *Exporter) scrape(ch chan<- prometheus.Metric) (up float64) {
 
 	_ = json.Unmarshal([]byte(bodyAll), &p)
 
-
 	ch <- prometheus.MustNewConstMetric(e.pactBrokerPacticipants.Desc(), prometheus.GaugeValue, float64(len(p.Embedded.Pacticipants)))
 
 	for _, pacticipant := range p.Embedded.Pacticipants {
