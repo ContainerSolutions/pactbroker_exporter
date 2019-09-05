@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/log"
 	"github.com/prometheus/common/version"
@@ -59,7 +58,7 @@ func NewExporter(uri string, timeout time.Duration) (*Exporter, error) {
 				Help:      "The current health status of the server (1 = UP, 0 = DOWN).",
 			},
 		),
-		pactBrokerPacts: promauto.NewGaugeVec(
+		pactBrokerPacts: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: namespace,
 				Name:      "pacts",
@@ -67,14 +66,14 @@ func NewExporter(uri string, timeout time.Duration) (*Exporter, error) {
 			},
 			[]string{"name"},
 		),
-		pactBrokerPacticipants: promauto.NewGauge(
+		pactBrokerPacticipants: prometheus.NewGauge(
 			prometheus.GaugeOpts{
 				Namespace: namespace,
 				Name:      "pacticipants",
 				Help:      "The current number of pacticipants.",
 			},
 		),
-		totalScrapes: promauto.NewCounter(
+		totalScrapes: prometheus.NewCounter(
 			prometheus.CounterOpts{
 				Namespace: namespace,
 				Name:      "total_scrapes",
@@ -86,12 +85,13 @@ func NewExporter(uri string, timeout time.Duration) (*Exporter, error) {
 
 // Describe function of Exporter
 func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
 
 	ch <- e.totalScrapes.Desc()
 	ch <- e.pactBrokerPacticipants.Desc()
 	ch <- e.pactBrokerUp.Desc()
 	e.pactBrokerPacts.Describe(ch)
-
 }
 
 // Collect function of Exporter
@@ -102,7 +102,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	up := e.scrape(ch)
 
 	ch <- prometheus.MustNewConstMetric(e.pactBrokerUp.Desc(), prometheus.GaugeValue, up)
-
+	e.pactBrokerPacts.Collect(ch)
 }
 
 type pacticipants struct {
