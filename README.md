@@ -2,7 +2,6 @@
 
 Prometheus exporter for [Pact Broker](https://github.com/pact-foundation/pact_broker).
 
-[![CircleCI](https://circleci.com/gh/ContainerSolutions/pactbroker_exporter.svg?style=svg)](https://circleci.com/gh/ContainerSolutions/pactbroker_exporter)
 [![Docker Pulls](https://img.shields.io/docker/pulls/containersol/pactbroker_exporter.svg)](https://hub.docker.com/r/containersol/pactbroker_exporter/tags)
 
 ## Quick Start
